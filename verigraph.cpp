@@ -12,7 +12,7 @@ using namespace slang;
 
 void printDepsForInstance(InstanceSymbol const& parent) {
     for (auto const& child : parent.body.membersOfType<InstanceSymbol>()) {
-        std::cout << "\t\"" << parent.getDefinition().name << " " << parent.name << "()\" -> \"" << child.getDefinition().name << " " << child.name << "()\"" << std::endl;
+        std::cout << "\t\"" << parent.getDefinition().name << "\n" << parent.name << "()\" -> \"" << child.getDefinition().name << "\n" << child.name << "()\"" << std::endl;
         printDepsForInstance(child);
     }
 }
