@@ -19,6 +19,9 @@ void printDepsForScope(InstanceSymbol const& parent, Scope const& scope, int lev
     for (auto const& block : scope.membersOfType<GenerateBlockSymbol>()) {
         printDepsForScope(parent, block, levels);
     }
+    for (auto const& block : scope.membersOfType<GenerateBlockArraySymbol>()) {
+        printDepsForScope(parent, block, levels);
+    }
     for (auto const& child : scope.membersOfType<InstanceSymbol>()) {
         std::cout << "\t\"" << (parent.isInterface()? "<interface>\n":"") << parent.getDefinition().name << "\" -> \"" << (child.isInterface()? "<interface>\\n":"") << child.getDefinition().name << "\"" << std::endl;
         printDepsForScope(child, child.body, levels-1);
