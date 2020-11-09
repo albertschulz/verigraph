@@ -1,61 +1,86 @@
+#include <cli.hpp>
 #include <slang/compilation/Compilation.h>
 #include <slang/compilation/Definition.h>
 #include <slang/symbols/CompilationUnitSymbols.h>
 #include <slang/symbols/InstanceSymbols.h>
+#include <slang/symbols/MemberSymbols.h>
+#include <slang/symbols/CompilationUnitSymbols.h>
+#include <slang/symbols/Scope.h>
+#include <slang/symbols/BlockSymbols.h>
 #include <slang/syntax/SyntaxTree.h>
 #include <slang/util/Bag.h>
 #include <slang/text/SourceManager.h>
-
 #include <iostream>
 
 using namespace slang;
 
-void printDepsForInstance(InstanceSymbol const& parent, int levels) {
+void printDepsForScope(InstanceSymbol const& parent, Scope const& scope, int levels) {
     if (levels == 0) return;
-    for (auto const& child : parent.body.membersOfType<InstanceSymbol>()) {
-        std::cout << "\t\"" << (parent.isInterface()? "<interface>\n":"") << parent.getDefinition().name << "\" -> \"" << (child.isInterface()? "<interface>\n":"") << child.getDefinition().name << "\"" << std::endl;
-        printDepsForInstance(child, levels-1);
+    for (auto const& block : scope.membersOfType<GenerateBlockSymbol>()) {
+        printDepsForScope(parent, block, levels);
+    }
+    for (auto const& child : scope.membersOfType<InstanceSymbol>()) {
+        std::cout << "\t\"" << (parent.isInterface()? "<interface>\n":"") << parent.getDefinition().name << "\" -> \"" << (child.isInterface()? "<interface>\\n":"") << child.getDefinition().name << "\"" << std::endl;
+        printDepsForScope(child, child.body, levels-1);
+    }
+    for (auto const& child : scope.membersOfType<WildcardImportSymbol>()) {
+        std::cout << "\t\"" << (parent.isInterface()? "<interface>\n":"") << parent.getDefinition().name << "\" -> \"" << child.packageName << "::*\"" << std::endl;
+    }
+    for (auto const& child : scope.membersOfType<ExplicitImportSymbol>()) {
+        std::cout << "\t\"" << (parent.isInterface()? "<interface>\n":"") << parent.getDefinition().name << "\" -> \"" << child.packageName << "::" << child.importName << "\"" << std::endl;
     }
 }
 
-int main(int argc, char *argv[])
+int main(int argc, const char **argv)
 {
-    const std::string root = "fifo_fwft_tb";
-    const int levels = 2;
+    cli::Parser parser(argc, argv);
+    parser.help() << R"(Awesome CLI tool Usage: <command> [options] filenames...)";
 
-    if (argc < 2) {
-        std::cerr << "Error: files missing" << std::endl;
-        return 1;
-    }
-    
-    std::vector<std::string> files(argv + 1, argv + argc);
-    SourceManager sourceManager;
-    std::vector<SourceBuffer> buffers;
-    for (const std::string& file : files) {
-        SourceBuffer buffer = sourceManager.readSource(file);
-        if (!buffer) {
-            continue;
+    auto root = parser.option("root").alias("r").description("Root module").getValue();
+    auto max_levels = parser.option("max-levels").alias("l").description("Maximum levels. Defaults to -1 (no limit)").defaultValue("-1").getValue();
+
+    parser.defaultCommand().alias("p").execute([&](cli::Parser &parser)
+    {
+		if (parser.hasErrors())
+			return EXIT_FAILURE;
+
+        parser.getRemainingArguments(argc, argv);
+        std::vector<std::string> files(argv + 1, argv + argc);
+        
+        SourceManager sourceManager;
+        std::vector<SourceBuffer> buffers;
+        for (const std::string& file : files) {
+            auto buffer = sourceManager.readSource(file);
+            if (!buffer) {
+                std::cerr << "Error reading file: " << file << std::endl;
+                continue;
+            }
+            buffers.push_back(buffer);
         }
 
-        buffers.push_back(buffer);
-    }
+        Bag options;
+        Compilation compilation(options);
+        compilation.addSyntaxTree(SyntaxTree::fromBuffers(buffers, sourceManager));
 
-    Bag options;
-    Compilation compilation(options);
-    compilation.addSyntaxTree(SyntaxTree::fromBuffers(buffers, sourceManager));
+        std::cout << "digraph dependencies" << std::endl;
+        std::cout << "{" << std::endl;
+        std::cout << "node [shape=record];" << std::endl;
+        std::cout << "node [fontname = \"monospace\"];" << std::endl;
+        Scope rootScope = compilation.getRoot();
 
-    auto topInstances = compilation.getRoot().topInstances;
+        for (auto& instance : rootScope.membersOfType<InstanceSymbol>())
+            printDepsForScope(instance, instance.body, std::stoi(max_levels));
 
+        std::cout << "}" << std::endl;
+        
+		return EXIT_SUCCESS;
+	});
 
-    std::cout << "digraph dependencies" << std::endl;
-    std::cout << "{" << std::endl;
-    std::cout << "node [shape=record];" << std::endl;
-    if (!topInstances.empty()) {
-        for (auto inst : topInstances) {
-            if (inst->name == root)
-                printDepsForInstance(*inst, levels);
-        }
-    }
-    std::cout << "}" << std::endl;
-    return 0;
+    int result;
+	bool executed = parser.executeCommand(result);
+
+    if (parser.hasErrors())
+        return EXIT_FAILURE;
+
+    return EXIT_SUCCESS;
 }
