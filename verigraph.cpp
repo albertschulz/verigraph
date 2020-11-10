@@ -12,6 +12,7 @@
 #include <slang/text/SourceManager.h>
 #include <iostream>
 #include <sstream>
+#include <set>
 
 using namespace slang;
 
@@ -21,23 +22,30 @@ std::string serialize(InstanceSymbol const& symbol) {
     return ss.str();
 }
 
-void printDepsForScope(InstanceSymbol const& parent, Scope const& scope, int levels) {
+void printDepsForScope(std::set<std::string>& list, InstanceSymbol const& parent, Scope const& scope, int levels) {
     if (levels == 0) return;
     for (auto const& block : scope.membersOfType<GenerateBlockSymbol>()) {
-        printDepsForScope(parent, block, levels);
+        printDepsForScope(list, parent, block, levels);
     }
     for (auto const& block : scope.membersOfType<GenerateBlockArraySymbol>()) {
-        printDepsForScope(parent, block, levels);
+        printDepsForScope(list, parent, block, levels);
     }
     for (auto const& child : scope.membersOfType<InstanceSymbol>()) {
-        std::cout << "\t" << serialize(parent) << " -> " << serialize(child) << std::endl;
-        printDepsForScope(child, child.body, levels-1);
+        std::stringstream ss;
+        ss << "\t" << serialize(parent) << " -> " << serialize(child);
+        list.insert(ss.str());
+        printDepsForScope(list, child, child.body, levels-1);
     }
     for (auto const& child : scope.membersOfType<WildcardImportSymbol>()) {
-        std::cout << "\t" << serialize(parent) << " -> " << "\"" << child.packageName << "::*" << "\"" << std::endl;
+        std::stringstream ss;
+        ss << "\t" << serialize(parent) << " -> " << "\"" << child.packageName << "::*" << "\"";
+        list.insert(ss.str());
     }
     for (auto const& child : scope.membersOfType<ExplicitImportSymbol>()) {
-        std::cout << "\t" << serialize(parent) << " -> " << "\"" << child.packageName << "::" << child.importName << "\"" << std::endl;
+        std::stringstream ss;
+        ss << "\t" << serialize(parent) << " -> " << "\"" << child.packageName << "::" << child.importName << "\"";
+        std::string tmp = ss.str();
+        list.insert(tmp);
     }
 }
 
@@ -71,16 +79,18 @@ int main(int argc, const char **argv)
         Bag options;
         Compilation compilation(options);
         compilation.addSyntaxTree(SyntaxTree::fromBuffers(buffers, sourceManager));
+        
+        Scope rootScope = compilation.getRoot();
+        std::set<std::string> entries;
+        for (auto& instance : rootScope.membersOfType<InstanceSymbol>())
+            printDepsForScope(entries, instance, instance.body, std::stoi(max_levels));
 
         std::cout << "digraph dependencies" << std::endl;
         std::cout << "{" << std::endl;
         std::cout << "node [shape=record];" << std::endl;
         std::cout << "node [fontname = \"monospace\"];" << std::endl;
-        Scope rootScope = compilation.getRoot();
-
-        for (auto& instance : rootScope.membersOfType<InstanceSymbol>())
-            printDepsForScope(instance, instance.body, std::stoi(max_levels));
-
+        for (auto const& item : entries)
+            std::cout << item << std::endl;
         std::cout << "}" << std::endl;
         
 		return EXIT_SUCCESS;
