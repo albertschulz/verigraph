@@ -1,5 +1,7 @@
 # verigraph - SystemVerilog Dependency Graphs
 
+> Important: This project is still under construction!
+
 Convert SystemVerilog Code into GraphViz Graph
 
 ![Graph for example/top.sv](example/top.svg)
