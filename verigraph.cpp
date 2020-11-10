@@ -11,8 +11,15 @@
 #include <slang/util/Bag.h>
 #include <slang/text/SourceManager.h>
 #include <iostream>
+#include <sstream>
 
 using namespace slang;
+
+std::string serialize(InstanceSymbol const& symbol) {
+    std::stringstream ss;
+    ss << "\"" << (symbol.isInterface()? "<interface>\n":"") << symbol.getDefinition().name << "\"";
+    return ss.str();
+}
 
 void printDepsForScope(InstanceSymbol const& parent, Scope const& scope, int levels) {
     if (levels == 0) return;
@@ -23,14 +30,14 @@ void printDepsForScope(InstanceSymbol const& parent, Scope const& scope, int lev
         printDepsForScope(parent, block, levels);
     }
     for (auto const& child : scope.membersOfType<InstanceSymbol>()) {
-        std::cout << "\t\"" << (parent.isInterface()? "<interface>\n":"") << parent.getDefinition().name << "\" -> \"" << (child.isInterface()? "<interface>\\n":"") << child.getDefinition().name << "\"" << std::endl;
+        std::cout << "\t" << serialize(parent) << " -> " << serialize(child) << std::endl;
         printDepsForScope(child, child.body, levels-1);
     }
     for (auto const& child : scope.membersOfType<WildcardImportSymbol>()) {
-        std::cout << "\t\"" << (parent.isInterface()? "<interface>\n":"") << parent.getDefinition().name << "\" -> \"" << child.packageName << "::*\"" << std::endl;
+        std::cout << "\t" << serialize(parent) << " -> " << "\"" << child.packageName << "::*" << "\"" << std::endl;
     }
     for (auto const& child : scope.membersOfType<ExplicitImportSymbol>()) {
-        std::cout << "\t\"" << (parent.isInterface()? "<interface>\n":"") << parent.getDefinition().name << "\" -> \"" << child.packageName << "::" << child.importName << "\"" << std::endl;
+        std::cout << "\t" << serialize(parent) << " -> " << "\"" << child.packageName << "::" << child.importName << "\"" << std::endl;
     }
 }
 
